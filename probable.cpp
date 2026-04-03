@@ -92,7 +92,7 @@ constant = pow(m.params.deform_pot_op, 2) * m.params.mass * factor /
 (2 * math::pi * consts::hbar * consts::hbar * m.params.density * m.params.optical_phonon_energy);
 }
 
-// вер-ть расс опт фононы 2.70
+// вер-сть расс опт фононы 2.70
 double OpticalScattering::rate(const Vec3 &p) const {
 double D_op = m.params.deform_pot_op;
 double rho = m.params.density;

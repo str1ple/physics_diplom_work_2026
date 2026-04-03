@@ -37,7 +37,7 @@ const double pi = acos(-1);
 
 namespace probable {
 struct SuperlatticeParams {
-double delta;              // Ширина минизоны (эВ)
+double delta;              // Ширина мини-зоны (эВ)
 double period;             // Период сверхрешётки d (см)
 double mass;               // Эффективная масса
 double sound_vel;          // Скорость звука (см/с)
