@@ -7,7 +7,7 @@
 
 int main() {
 probable::SuperlatticeParams sl_params;
-sl_params.delta = 0.015 * units::eV;           // Ширина минизоны
+sl_params.delta = 0.015 * units::eV;           // Ширина мини-зоны
 sl_params.period = 5e-6 * units::cm;           // Период сверхрешётки
 sl_params.mass = 0.29 * consts::me;            // Эффективная масса
 sl_params.sound_vel = 5e5 * units::cm / units::s;  // Скорость звука
