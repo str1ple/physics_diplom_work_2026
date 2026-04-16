@@ -3,79 +3,132 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <omp.h>
 #include "probable.h"
 
+using namespace probable;
+
 int main() {
-    probable::SuperlatticeParams sl_params;
-    sl_params.delta = 0.015 * units::eV;           // Ширина мини-зоны
-    sl_params.period = 5e-6 * units::cm;           // Период сверхрешётки
-    sl_params.mass = 0.29 * consts::me;            // Эффективная масса
-    sl_params.sound_vel = 5e5 * units::cm / units::s;  // Скорость звука
-    sl_params.deform_pot_ac = 10 * units::eV;      // Деформационный потенциал акустических
-    sl_params.deform_pot_op = 1e8 * units::eV / units::cm;  // Деформационный потенциал оптических
-    sl_params.optical_phonon_energy = 0.035 * units::eV;  // Энергия оптического фонона
-    sl_params.density = 5.0 * units::g / pow(units::cm, 3);  // Плотность
+    // Настройка количества потоков (автоматически по ядрам CPU)
+    omp_set_num_threads(omp_get_max_threads());
+    std::cout << "Using " << omp_get_max_threads() << " OpenMP threads.\n";
 
-    probable::Material superlattice{sl_params};
+    SuperlatticeParams sl_params;
+    sl_params.delta = 0.015 * units::eV;
+    sl_params.period = 5e-6 * units::cm;
+    sl_params.mass = 0.29 * consts::me;
+    sl_params.sound_vel = 5e5 * units::cm / units::s;
+    sl_params.deform_pot_ac = 10 * units::eV;
+    sl_params.deform_pot_op = 1e8 * units::eV / units::cm;
+    sl_params.optical_phonon_energy = 0.035 * units::eV;
+    sl_params.density = 5.0 * units::g / pow(units::cm, 3);
 
+    Material superlattice{sl_params};
     double temperature = 300 * units::K;
     double time_step = 1e-14 * units::s;
-    double all_time = 50e-12 * units::s;
-    size_t ensemble_size = 2000;
+    double all_time = 200e-12 * units::s;
+    size_t ensemble_size = 5000;
+    double frequency = 1e12;
+    double omega = 2 * math::pi * frequency;
 
-    std::vector<double> E_values = {100, 200, 300, 500, 750, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7000};
+    std::cout << "=== Circular Hall Effect in Superlattices ===\n";
+    std::cout << "Temperature: " << temperature / units::K << " K\n";
+    std::cout << "Frequency: " << frequency / 1e12 << " THz\n";
+    std::cout << "Ensemble size: " << ensemble_size << "\n\n";
 
-    std::ofstream vah_file("VAH_data.txt");
-    vah_file << "# E(V/m) \t v_y(m/s) \t v_x(m/s) \t j(A/m^2)" << std::endl;
+    std::vector<Scattering *> mechanisms{
+        new AcousticScattering(superlattice, temperature),
+        new OpticalScattering(superlattice, temperature, false),
+        new OpticalScattering(superlattice, temperature, true)
+    };
 
-    std::cout << "Calculating V-A characteristic..." << std::endl;
-    std::cout << "Temperature: " << temperature / units::K << " K" << std::endl;
-    std::cout << "Ensemble size: " << ensemble_size << std::endl;
-    std::cout << "Simulation time: " << all_time / units::ps << " ps" << std::endl;
-    std::cout << std::endl;
+    // === ГРАФИК 1: DC поле ===
+    {
+        std::cout << "[1/3] Calculating DC field dependence...\n";
+        std::ofstream file("dc_field_dependence.txt");
+        file << "# E_dc_x(V/m) \t E_dc_y(V/m) \t v_x(m/s) \t v_y(m/s)\n";
+        std::vector<double> E_dc_values = {100, 200, 500, 750, 1000, 1500, 2000, 3000, 4000, 5000, 6000};
+        ACField ac_field(500 * units::V / units::m, 500 * units::V / units::m, omega, 0);
+        Vec3 B{0, 0, 0};
 
-    for (double E : E_values) {
-        Vec3 electric_field{0, E * units::V / units::m, 0};
-        Vec3 magnetic_field{0, 0, 0};
+        for (double E_dc : E_dc_values) {
+            DCField dc_field(E_dc * units::V / units::m, E_dc * units::V / units::m);
+            auto results = simulate(superlattice, mechanisms, temperature, dc_field, ac_field, B, time_step, all_time, ensemble_size, DumpFlags::none);
 
-        std::vector<probable::Scattering *> scattering_mechanisms{
-            new probable::AcousticScattering(superlattice, temperature),
-            new probable::OpticalScattering(superlattice, temperature, false),  // поглощение
-            new probable::OpticalScattering(superlattice, temperature, true)   // испускание
-        };
+            double sum_x = 0, sum_y = 0, sum_z = 0;
+            #pragma omp parallel for reduction(+:sum_x, sum_y, sum_z)
+            for (size_t i = 0; i < results.size(); ++i) {
+                sum_x += results[i].average_velocity.x;
+                sum_y += results[i].average_velocity.y;
+                sum_z += results[i].average_velocity.z;
+            }
+            Vec3 avg_v{sum_x / results.size(), sum_y / results.size(), sum_z / results.size()};
 
-        auto results = probable::simulate(superlattice,
-                                          scattering_mechanisms,
-                                          temperature,
-                                          electric_field,
-                                          magnetic_field,
-                                          time_step,
-                                          all_time,
-                                          ensemble_size,
-                                          probable::DumpFlags(probable::DumpFlags::none));
-
-        Vec3 average_velocity{0, 0, 0};
-        for (std::size_t i = 0; i < results.size(); ++i) {
-            average_velocity += (results[i].average_velocity - average_velocity) / (i + 1);
+            file << E_dc << "\t" << E_dc << "\t" << avg_v.x / units::m * units::s << "\t" << avg_v.y / units::m * units::s << "\n";
+            std::cout << "  E_dc=" << E_dc << " V/m | v_x=" << avg_v.x / units::m * units::s << " | v_y=" << avg_v.y / units::m * units::s << "\n";
         }
-
-        double n = 1e17 * pow(units::cm, -3);
-        double j_y = consts::e * n * average_velocity.y;
-
-        vah_file << std::setprecision(6)
-                 << E << "\t"
-                 << average_velocity.y / units::m * units::s << "\t"
-                 << average_velocity.x / units::m * units::s << "\t"
-                 << j_y << std::endl;
-
-        std::cout << "E = " << E << " V/m, v_y = " << average_velocity.y / units::m * units::s
-                  << " m/s, v_x = " << average_velocity.x / units::m * units::s << " m/s" << std::endl;
-
-        for (auto &sc : scattering_mechanisms) delete sc;
+        file.close();
     }
 
-    vah_file.close();
-    std::cout << "\nData saved to VAH_data.txt" << std::endl;
+    // === ГРАФИК 2: AC амплитуда ===
+    {
+        std::cout << "\n[2/3] Calculating AC amplitude dependence...\n";
+        std::ofstream file("ac_field_dependence.txt");
+        file << "# E0_x(V/m) \t E0_y(V/m) \t v_x(m/s) \t v_y(m/s)\n";
+        std::vector<double> E0_values = {100, 200, 500, 750, 1000, 1500, 2000, 3000, 4000, 5000, 6000};
+        DCField dc_field(500 * units::V / units::m, 500 * units::V / units::m);
+        Vec3 B{0, 0, 0};
 
+        for (double E0 : E0_values) {
+            ACField ac_field(E0 * units::V / units::m, E0 * units::V / units::m, omega, math::pi / 4);
+            auto results = simulate(superlattice, mechanisms, temperature, dc_field, ac_field, B, time_step, all_time, ensemble_size, DumpFlags::none);
+
+            double sum_x = 0, sum_y = 0, sum_z = 0;
+            #pragma omp parallel for reduction(+:sum_x, sum_y, sum_z)
+            for (size_t i = 0; i < results.size(); ++i) {
+                sum_x += results[i].average_velocity.x;
+                sum_y += results[i].average_velocity.y;
+                sum_z += results[i].average_velocity.z;
+            }
+            Vec3 avg_v{sum_x / results.size(), sum_y / results.size(), sum_z / results.size()};
+
+            file << E0 << "\t" << E0 << "\t" << avg_v.x / units::m * units::s << "\t" << avg_v.y / units::m * units::s << "\n";
+            std::cout << "  E0=" << E0 << " V/m | v_x=" << avg_v.x / units::m * units::s << " | v_y=" << avg_v.y / units::m * units::s << "\n";
+        }
+        file.close();
+    }
+
+    // === ГРАФИК 3: Фаза ===
+    {
+        std::cout << "\n[3/3] Calculating phase dependence...\n";
+        std::ofstream file("phase_dependence.txt");
+        file << "# phi(rad) \t phi(deg) \t v_x(m/s) \t v_y(m/s)\n";
+        size_t num_phases = 25;
+        DCField dc_field(500 * units::V / units::m, 500 * units::V / units::m);
+        double E0 = 1000;
+        Vec3 B{0, 0, 0};
+
+        for (size_t i = 0; i <= num_phases; ++i) {
+            double phi = 2 * math::pi * i / num_phases;
+            ACField ac_field(E0 * units::V / units::m, E0 * units::V / units::m, omega, phi);
+            auto results = simulate(superlattice, mechanisms, temperature, dc_field, ac_field, B, time_step, all_time, ensemble_size, DumpFlags::none);
+
+            double sum_x = 0, sum_y = 0, sum_z = 0;
+            #pragma omp parallel for reduction(+:sum_x, sum_y, sum_z)
+            for (size_t j = 0; j < results.size(); ++j) {
+                sum_x += results[j].average_velocity.x;
+                sum_y += results[j].average_velocity.y;
+                sum_z += results[j].average_velocity.z;
+            }
+            Vec3 avg_v{sum_x / results.size(), sum_y / results.size(), sum_z / results.size()};
+
+            file << phi << "\t" << phi * 180 / math::pi << "\t" << avg_v.x / units::m * units::s << "\t" << avg_v.y / units::m * units::s << "\n";
+            std::cout << "  phi=" << phi*180/math::pi << "° | v_x=" << avg_v.x / units::m * units::s << " | v_y=" << avg_v.y / units::m * units::s << "\n";
+        }
+        file.close();
+    }
+
+    for (auto &sc : mechanisms) delete sc;
+    std::cout << "\n=== All calculations completed ===\n";
     return 0;
 }
