@@ -24,7 +24,7 @@ double ellint_1(double k) {
 }
 
 double uniform() {
-    // Каждый поток получает свой независимый генератор
+    // каждый поток получает свой генератор
     thread_local std::mt19937 generator(std::random_device{}());
     thread_local std::uniform_real_distribution<double> distribution(0, 1);
     return distribution(generator);
@@ -137,7 +137,6 @@ std::ostream &operator<<(std::ostream &s, const Results &r) {
     return s;
 }
 
-// === РАСПАРАЛЛЕЛЕННАЯ ВЕРСИЯ ===
 std::vector<Results> simulate(const Material &material,
                               const std::vector<Scattering *> mechanisms,
                               double temperature,
@@ -152,7 +151,7 @@ std::vector<Results> simulate(const Material &material,
     size_t steps = all_time / time_step + 1;
     size_t alloc = (flags & DumpFlags::on_scatterings) ? steps / 10 : steps;
 
-    // Распараллеливание по ансамблю частиц
+    // распараллеливание по ансамблю частиц
     #pragma omp parallel for schedule(static)
     for (size_t i = 0; i < ensemble_size; ++i) {
         Results result;

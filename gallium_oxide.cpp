@@ -9,7 +9,7 @@
 using namespace probable;
 
 int main() {
-    // Настройка количества потоков (автоматически по ядрам CPU)
+    // распараллеливание
     omp_set_num_threads(omp_get_max_threads());
     std::cout << "Using " << omp_get_max_threads() << " OpenMP threads.\n";
 

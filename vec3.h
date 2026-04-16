@@ -2,7 +2,7 @@
 #include <cmath>
 #include <iostream>
 
-// вект
+// вектор
 struct Vec3 {
     double x, y, z;
 

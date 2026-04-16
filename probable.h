@@ -22,6 +22,8 @@ namespace units {
     const double K = 1.38e-23 / 1.6e-19;
 }
 
+// константы
+
 namespace consts {
     const double hbar = 1.0545718e-34 * units::J * units::s;
     const double e = 1.6021766e-19 * units::C;

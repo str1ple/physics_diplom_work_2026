@@ -3,7 +3,7 @@ import numpy as np
 
 plt.style.use('seaborn-v0_8-whitegrid')
 
-# пост поле
+# пост. поле
 dc_data = np.loadtxt('dc_field_dependence.txt', comments='#')
 E_dc = dc_data[:, 0]
 v_x_dc, v_y_dc = dc_data[:, 2], dc_data[:, 3]
