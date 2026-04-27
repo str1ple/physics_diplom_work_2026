@@ -1,100 +1,91 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+import glob
 
+# Настройки стиля
 plt.style.use('seaborn-v0_8-whitegrid')
 plt.rcParams['font.family'] = 'DejaVu Sans'
+plt.rcParams['font.size'] = 11
 
-# для легенд
-TEMP = 300          # K
-FREQ = 1.0          # ТГц
-DC_FIXED = 500      # В/м
-AC_FIXED = 1000     # В/м
-PHASE_FIXED = 45    # град
+def load_comparison_data(pattern):
+    files = sorted(glob.glob(pattern))
+    data = {}
+    for f in files:
+        name = os.path.basename(f)
+        # Извлекаем значение параметра из имени файла (например, E0_500 -> 500)
+        parts = name.replace('.txt', '').split('_')
+        val_str = parts[-1]
+        try:
+            val = float(val_str)
+        except:
+            val = val_str
+        data[val] = np.loadtxt(f, comments='#')
+    return data
 
-# пост поле
-data1 = np.loadtxt('dc_only_transverse.txt', comments='#')
-E_dc = data1[:, 0]
-v_perp1 = data1[:, 1]
+def plot_comparison_series(fig, ax, data, title, xlabel, param_name, param_unit, is_freq=False):
+    # Сортируем ключи для порядка в легенде
+    keys = sorted(data.keys(), key=lambda x: float(str(x).replace('_', '.')))
 
-plt.figure(figsize=(8, 6))
-plt.plot(E_dc, v_perp1, 'o-', color='darkblue', lw=2, ms=6,
-         label=f'Поперечная скорость\n(без переменного поля)')
-plt.xlabel('Постоянное электрическое поле $E_{dc}$ (В/м)')
-plt.ylabel('Средняя поперечная скорость $v_\\perp$ (м/с)')
-plt.title(f'Зависимость поперечной скорости от постоянного поля\n'
-          f'$E_x = E_y$, $T = {TEMP}$ К')
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig('dc_only_transverse.png', dpi=300)
+    # Цвета и маркеры
+    colors = plt.cm.tab10(np.linspace(0, 1, len(data)))
+    markers_dc = ['o', 's', '^', 'D', 'p', 'h'] # Для чистого DC
+    markers_ac = ['o', 's', '^', 'D', 'p', 'h'] # Для DC+AC
+
+    # Сначала рисуем ВСЕ линии "Только DC", чтобы они были на заднем плане (или одинаковые)
+    # Но так как DC only одинаков для всех, нарисуем его один раз жирным серым/синим
+    first_key = keys[0]
+    d_ref = data[first_key]
+    ax.plot(d_ref[:,0], d_ref[:,1], color='navy', linewidth=2.5, linestyle='-',
+            marker='o', markersize=6, label='Только постоянное поле (DC only)', zorder=10)
+
+    # Теперь рисуем линии DC+AC для каждого параметра
+    for i, val in enumerate(keys):
+        d = data[val]
+        color = colors[i]
+        label_val = val if not is_freq else f"{val}"
+
+        ax.plot(d[:,0], d[:,2], color=color, linewidth=2, linestyle='--',
+                marker=markers_ac[i%len(markers_ac)], markersize=6,
+                label=f'{param_name} = {label_val} {param_unit}')
+
+    ax.set_xlabel('$E_{dc}$ (В/м)\n(напряжённость постоянного поля)', fontweight='bold', fontsize=12)
+    ax.set_ylabel('Средняя поперечная скорость $v_perp$ (м/с)', fontweight='bold', fontsize=12)
+    ax.set_title(title, fontweight='bold', fontsize=14, pad=15)
+
+    # Легенда
+    ax.legend(loc='best', fontsize=10, framealpha=0.9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+
+# ================= СЕРИЯ 1: Амплитуда E0 =================
+print("Plotting Series 1: Comparison by AC Amplitude...")
+data_s1 = load_comparison_data("comp_s1_E0_*.txt")
+fig1, ax1 = plt.subplots(figsize=(10, 7))
+plot_comparison_series(fig1, ax1, data_s1,
+                       'Влияние амплитуды переменного поля $E_0$\nна поперечную скорость',
+                       '$E_{dc}$ (В/м)', '$E_0$', 'В/м')
+fig1.savefig('series1_compare_amplitude.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-# перем поле
-data2 = np.loadtxt('ac_amplitude_transverse.txt', comments='#')
-E0 = data2[:, 0]
-v_perp2 = data2[:, 1]
-
-plt.figure(figsize=(8, 6))
-plt.plot(E0, v_perp2, 's-', color='crimson', lw=2, ms=6,
-         label=f'С переменным полем\n'
-               f'$E_{{dc}} = {DC_FIXED}$ В/м, $\\phi = {PHASE_FIXED}°$')
-plt.xlabel('Амплитуда переменного поля $E_0$ (В/м)')
-plt.ylabel('Средняя поперечная скорость $v_\\perp$ (м/с)')
-plt.title(f'Влияние амплитуды переменного поля на поперечную скорость\n'
-          f'$T = {TEMP}$ К, $f = {FREQ}$ ТГц')
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig('ac_amplitude_transverse.png', dpi=300)
+# ================= СЕРИЯ 2: Частота f =================
+print("Plotting Series 2: Comparison by AC Frequency...")
+data_s2 = load_comparison_data("comp_s2_f_*.txt")
+fig2, ax2 = plt.subplots(figsize=(10, 7))
+plot_comparison_series(fig2, ax2, data_s2,
+                       'Влияние частоты переменного поля $f$\nна поперечную скорость',
+                       '$E_{dc}$ (В/м)', '$10*f$', 'ТГц', is_freq=True)
+fig2.savefig('series2_compare_frequency.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-# сравнение
-plt.figure(figsize=(9, 6))
-# только пост поле
-plt.plot(E_dc, v_perp1, 'o-', color='darkblue', lw=2, ms=6,
-         label='Только постоянное поле\n(изменяется $E_{dc}$)')
-# оба поля
-plt.plot(E0, v_perp2, 's-', color='crimson', lw=2, ms=6,
-         label=f'Постоянное + переменное поле\n'
-               f'$E_{{dc}} = {DC_FIXED}$ В/м, $\\phi = {PHASE_FIXED}°$')
-plt.xlabel('Напряжённость поля (В/м)\n'
-           '(для кривой 1 – $E_{dc}$, для кривой 2 – амплитуда $E_0$)')
-plt.ylabel('Средняя поперечная скорость $v_\\perp$ (м/с)')
-plt.title(f'Сравнение поперечной скорости с переменным полем и без него\n'
-          f'$T = {TEMP}$ К, $f = {FREQ}$ ТГц')
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig('comparison_transverse.png', dpi=300)
+# ================= СЕРИЯ 3: Фаза phi =================
+print("Plotting Series 3: Comparison by AC Phase...")
+data_s3 = load_comparison_data("comp_s3_phi_*.txt")
+fig3, ax3 = plt.subplots(figsize=(10, 7))
+plot_comparison_series(fig3, ax3, data_s3,
+                       'Влияние фазы переменного поля $phi$\nна поперечную скорость',
+                       '$E_{dc}$ (В/м)', '$phi$', '°')
+fig3.savefig('series3_compare_phase.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-# фаза
-data3 = np.loadtxt('phase_transverse.txt', comments='#')
-phi_rad = data3[:, 0]
-phi_deg = data3[:, 1]
-v_perp3 = data3[:, 2]
-
-plt.figure(figsize=(10, 5))
-plt.plot(phi_deg, v_perp3, 'o-', color='green', lw=2, ms=6,
-         label=f'$E_{{dc}} = {DC_FIXED}$ В/м, $E_0 = {AC_FIXED}$ В/м')
-plt.xlabel('Фаза $\\phi$ (градусы)')
-plt.ylabel('Средняя поперечная скорость $v_\\perp$ (м/с)')
-plt.title(f'Зависимость поперечной скорости от фазы переменного поля\n'
-          f'$T = {TEMP}$ К, $f = {FREQ}$ ТГц')
-plt.xticks(np.arange(0, 361, 45))
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig('phase_transverse_linear.png', dpi=300)
-plt.show()
-
-# поляр диаг
-fig = plt.figure(figsize=(8, 8))
-ax = fig.add_subplot(111, projection='polar')
-ax.plot(phi_rad, v_perp3, 'o-', color='green', lw=2, ms=6,
-        label=f'$E_{{dc}} = {DC_FIXED}$ В/м\n$E_0 = {AC_FIXED}$ В/м')
-ax.set_title('Полярная диаграмма: поперечная скорость vs фаза', pad=20)
-ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.0))
-plt.tight_layout()
-plt.savefig('phase_transverse_polar.png', dpi=300)
-plt.show()
+print("Done. Figures saved as series*_compare_*.png")
