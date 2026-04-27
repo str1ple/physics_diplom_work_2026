@@ -19,7 +19,7 @@ void decompose_velocity(const Vec3& v, const DCField& dc, double& v_long, double
     }
     // Единичный вектор вдоль E_dc (направлен под 45° к осям, так как E_x = E_y)
     Vec3 e_par = {dc.E_x / E_mag, dc.E_y / E_mag, 0.0};
-    // Единичный вектор перпендикулярно (+90° против часовой стрелки)
+    // Единичный вектор перпендикулярно
     Vec3 e_perp = {-e_par.y, e_par.x, 0.0};
 
     v_long = v.x * e_par.x + v.y * e_par.y;
@@ -28,7 +28,7 @@ void decompose_velocity(const Vec3& v, const DCField& dc, double& v_long, double
 
 int main() {
     omp_set_num_threads(omp_get_max_threads());
-    std::cout << "Using " << omp_get_max_threads() << " OpenMP threads.\n";
+    std::cout << "Используется " << omp_get_max_threads() << " OpenMP ядер.\n";
 
     // Параметры сверхрешетки
     SuperlatticeParams sl_params;
@@ -55,7 +55,8 @@ int main() {
         new OpticalScattering(superlattice, temperature, true)
     };
 
-    // НАЧАЛО ЗАПОЛНЕНИЯ E_DC_VALS (от 0 до 10.000 - 100 точек)
+    // НАЧАЛО ЗАПОЛНЕНИЯ E_DC_VALS
+
     std::vector<double> E_dc_vals = {0, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000};
     // int n_points = 100;
     // double start = 0.0;
@@ -65,6 +66,7 @@ int main() {
     // for (int i = 0; i < n_points; ++i) {
     //     E_dc_vals[i] = start + i * step;
     // }
+
     // КОНЕЦ ЗАПОЛНЕНИЯ E_DC_VALS
 
     // Вспомогательная функция для запуска симуляции
@@ -79,10 +81,8 @@ int main() {
         out_v = avg_v;
     };
 
-    // =========================================================
-    // СЕРИЯ 1: Сравнение при варьирующейся амплитуде E0
-    // =========================================================
-    std::cout << "\n[1/3] Series 1: Varying AC Amplitude...\n";
+    // 1. Сравнение при изменении амплитуды E0
+    std::cout << "\n[1/3] СЕРИЯ 1: Изменение амплитуды переменного поля...\n";
     std::vector<double> E0_vals = {500, 1500, 3000, 6000};
     double freq1 = 1.0e12;
     double phase1 = math::pi / 4.0; // 45 градусов
@@ -91,13 +91,13 @@ int main() {
         std::string fname = "comp_s1_E0_" + std::to_string(static_cast<int>(E0)) + ".txt";
         std::ofstream file(fname);
         file << "# E_dc (V/m) \t v_trans_DC_only (m/s) \t v_trans_DC_plus_AC (m/s)\n";
-        std::cout << "  Calculating for E0 = " << E0 << " V/m...\n";
+        std::cout << "  Вычисление для E0 = " << E0 << " В/м...\n";
 
         for (double E_dc_val : E_dc_vals) {
             // Поле под 45 градусов
             DCField dc_field(E_dc_val * units::V / units::m, E_dc_val * units::V / units::m);
 
-            // 1. Чистое постоянное поле
+            // 1. Только постоянное поле
             ACField ac_zero(0, 0, 0, 0);
             Vec3 v1;
             run_sim(dc_field, ac_zero, v1);
@@ -119,10 +119,8 @@ int main() {
         file.close();
     }
 
-    // =========================================================
-    // СЕРИЯ 2: Сравнение при варьирующейся частоте f
-    // =========================================================
-    std::cout << "\n[2/3] Series 2: Varying AC Frequency...\n";
+    // 2. Сравнение при изменении частоты f
+    std::cout << "\n[2/3] СЕРИЯ 2: Изменение частоты переменного поля...\n";
     std::vector<double> freq_vals_THz = {0.1, 0.5, 1.0, 2.0};
     double E0_fixed = 3000.0;
     double phase2 = math::pi / 4.0;
@@ -131,19 +129,19 @@ int main() {
         std::string fname = "comp_s2_f_" + std::to_string(static_cast<int>(f_THz*10)) + ".txt";
         std::ofstream file(fname);
         file << "# E_dc (V/m) \t v_trans_DC_only (m/s) \t v_trans_DC_plus_AC (m/s)\n";
-        std::cout << "  Calculating for f = " << f_THz << " THz...\n";
+        std::cout << "  Вычисление для f = " << f_THz << " ТГц...\n";
 
         for (double E_dc_val : E_dc_vals) {
             DCField dc_field(E_dc_val * units::V / units::m, E_dc_val * units::V / units::m);
 
-            // 1. Чистое DC
+            // 1. Только постоянное поле
             ACField ac_zero(0, 0, 0, 0);
             Vec3 v1;
             run_sim(dc_field, ac_zero, v1);
             double v1_trans;
             { double l; decompose_velocity(v1, dc_field, l, v1_trans); }
 
-            // 2. DC + AC
+            // 2. Постоянное + Переменное
             ACField ac_field(E0_fixed * units::V / units::m, E0_fixed * units::V / units::m,
                            2 * math::pi * f_THz * 1e12, phase2);
             Vec3 v2;
@@ -158,10 +156,8 @@ int main() {
         file.close();
     }
 
-    // =========================================================
-    // СЕРИЯ 3: Сравнение при варьирующейся фазе phi
-    // =========================================================
-    std::cout << "\n[3/3] Series 3: Varying AC Phase...\n";
+    // 3. Сравнение при изменении фазы phi
+    std::cout << "\n[3/3] СЕРИЯ 3: Изменение фазы переменного поля...\n";
     std::vector<double> phase_vals_deg = {0, 45, 90, 150, 240, 360};
     double E0_fixed3 = 3000.0;
     double freq3 = 1.0e12;
@@ -171,19 +167,19 @@ int main() {
         std::string fname = "comp_s3_phi_" + std::to_string(static_cast<int>(phi_deg)) + ".txt";
         std::ofstream file(fname);
         file << "# E_dc (V/m) \t v_trans_DC_only (m/s) \t v_trans_DC_plus_AC (m/s)\n";
-        std::cout << "  Calculating for phi = " << phi_deg << " deg...\n";
+        std::cout << "  Вычисление для phi = " << phi_deg << " градусов...\n";
 
         for (double E_dc_val : E_dc_vals) {
             DCField dc_field(E_dc_val * units::V / units::m, E_dc_val * units::V / units::m);
 
-            // 1. Чистое DC
+            // 1. Только постоянное поле
             ACField ac_zero(0, 0, 0, 0);
             Vec3 v1;
             run_sim(dc_field, ac_zero, v1);
             double v1_trans;
             { double l; decompose_velocity(v1, dc_field, l, v1_trans); }
 
-            // 2. DC + AC
+            // 2. Постоянное + Переменное
             ACField ac_field(E0_fixed3 * units::V / units::m, E0_fixed3 * units::V / units::m,
                            2 * math::pi * freq3, phi);
             Vec3 v2;
@@ -199,6 +195,6 @@ int main() {
     }
 
     for (auto sc : mechanisms) delete sc;
-    std::cout << "\n=== All calculations completed ===\n";
+    std::cout << "\n=== Все вычисления успешно завершены. Можно строить графики ===\n";
     return 0;
 }

@@ -2,18 +2,28 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import glob
+from scipy.interpolate import CubicSpline
 
 # Настройки стиля
 plt.style.use('seaborn-v0_8-whitegrid')
 plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.rcParams['font.size'] = 11
+plt.rcParams['axes.labelsize'] = 12
+plt.rcParams['legend.fontsize'] = 11
+
+# Константы моделирования для легенды
+COMMON_PARAMS = {
+    'T': 300,          # К
+    't_mod': 200,      # пс
+    'N': 2000          # число частиц
+}
 
 def load_comparison_data(pattern):
     files = sorted(glob.glob(pattern))
     data = {}
     for f in files:
         name = os.path.basename(f)
-        # Извлекаем значение параметра из имени файла (например, E0_500 -> 500)
+        # Извлекаем значение параметра из имени файла
         parts = name.replace('.txt', '').split('_')
         val_str = parts[-1]
         try:
@@ -23,69 +33,184 @@ def load_comparison_data(pattern):
         data[val] = np.loadtxt(f, comments='#')
     return data
 
-def plot_comparison_series(fig, ax, data, title, xlabel, param_name, param_unit, is_freq=False):
-    # Сортируем ключи для порядка в легенде
+def add_gost_axes(ax, x_max, y_max, xlabel_text, ylabel_text):
+    # Скрываем рамку
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+
+    # ось X со стрелкой
+    ax.annotate('', xy=(x_max * 1.03, 0), xytext=(-x_max * 0.03, 0),
+                arrowprops=dict(arrowstyle='->', lw=2, color='black'))
+
+    # ось Y со стрелкой
+    # Стрелка чуть выше максимума
+    y_arrow_tip = y_max * 1.05
+    ax.annotate('', xy=(0, y_arrow_tip), xytext=(0, -y_max * 0.05),
+                arrowprops=dict(arrowstyle='->', lw=2, color='black'))
+
+    # Подпись оси X (справа, у стрелки)
+    ax.text(x_max * 1.05, -y_max * 0.04, xlabel_text,
+            ha='left', va='center', fontsize=13, fontweight='bold')
+
+    # Подпись оси Y (ГОРИЗОНТАЛЬНО, сверху оси)
+    ax.text(-x_max * 0.05, y_arrow_tip * 1.05, ylabel_text,
+            ha='center', va='bottom', rotation=0, fontsize=13, fontweight='bold')
+
+    # Настройка тиков
+    ax.tick_params(axis='both', which='major', labelsize=11, direction='out', length=6)
+
+
+def plot_comparison_series_gost(fig, ax, data, title, param_name, param_unit, is_freq=False, series_type='amp'):
+
     keys = sorted(data.keys(), key=lambda x: float(str(x).replace('_', '.')))
-
-    # Цвета и маркеры
     colors = plt.cm.tab10(np.linspace(0, 1, len(data)))
-    markers_dc = ['o', 's', '^', 'D', 'p', 'h'] # Для чистого DC
-    markers_ac = ['o', 's', '^', 'D', 'p', 'h'] # Для DC+AC
+    markers = ['o', 's', '^', 'D', 'p', 'h']
 
-    # Сначала рисуем ВСЕ линии "Только DC", чтобы они были на заднем плане (или одинаковые)
-    # Но так как DC only одинаков для всех, нарисуем его один раз жирным серым/синим
+    # --- 1. Подготовка данных для определения масштаба осей ---
+    all_x = []
+    all_y = []
+    for val in keys:
+        d = data[val]
+        all_x.extend(d[:, 0])
+        all_y.extend(d[:, 1]) # DC only
+        all_y.extend(d[:, 2]) # DC + AC
+
+    x_min, x_max = min(all_x), max(all_x)
+    y_min, y_max = min(all_y), max(all_y)
+
+    # Отступы
+    x_range = x_max - x_min if x_max != x_min else 1
+    y_range = y_max - y_min if y_max != y_min else 1
+
+    # Увеличиваем диапазоны для осей, чтобы влезли стрелки и подписи
+    x_plot_max = x_max + 0.15 * x_range
+    y_plot_max = y_max + 0.15 * y_range
+    y_plot_min = y_min - 0.1 * y_range
+
+    # --- 2. Построение кривых (Сплайн + Маркеры) ---
+
+    legend_handles = []
+    legend_labels = []
+
+    # кривая "Только DC"
     first_key = keys[0]
     d_ref = data[first_key]
-    ax.plot(d_ref[:,0], d_ref[:,1], color='navy', linewidth=2.5, linestyle='-',
-            marker='o', markersize=6, label='Только постоянное поле (DC only)', zorder=10)
+    x_ref = d_ref[:, 0]
+    y_ref = d_ref[:, 1]
 
-    # Теперь рисуем линии DC+AC для каждого параметра
+    # Сплайн
+    x_smooth_ref = np.linspace(x_ref.min(), x_ref.max(), 300)
+    cs_ref = CubicSpline(x_ref, y_ref)
+    y_smooth_ref = cs_ref(x_smooth_ref)
+
+    # Линия
+    line_ref, = ax.plot(x_smooth_ref, y_smooth_ref, color='navy', linewidth=2.5, linestyle='-', zorder=5)
+    # Точки
+    ax.plot(x_ref, y_ref, color='navy', marker='o', linestyle='', markersize=7, zorder=6)
+
+    # ДОБАВЛЯЕМ В ЛЕГЕНДУ
+    legend_handles.append(line_ref)
+    legend_labels.append('Только постоянное поле $E_{dc}$')
+
+    # Кривые "DC + AC"
     for i, val in enumerate(keys):
         d = data[val]
+        x = d[:, 0]
+        y = d[:, 2]
+
         color = colors[i]
         label_val = val if not is_freq else f"{val}"
 
-        ax.plot(d[:,0], d[:,2], color=color, linewidth=2, linestyle='--',
-                marker=markers_ac[i%len(markers_ac)], markersize=6,
-                label=f'{param_name} = {label_val} {param_unit}')
+        # Сплайн
+        x_smooth = np.linspace(x.min(), x.max(), 300)
+        cs = CubicSpline(x, y)
+        y_smooth = cs(x_smooth)
 
-    ax.set_xlabel('$E_{dc}$ (В/м)\n(напряжённость постоянного поля)', fontweight='bold', fontsize=12)
-    ax.set_ylabel('Средняя поперечная скорость $v_perp$ (м/с)', fontweight='bold', fontsize=12)
-    ax.set_title(title, fontweight='bold', fontsize=14, pad=15)
+        # Линия
+        line, = ax.plot(x_smooth, y_smooth, color=color, linewidth=2, linestyle='--', zorder=3)
+        # Точки
+        ax.plot(x, y, color=color, marker=markers[i%len(markers)], linestyle='', markersize=7, zorder=4)
 
-    # Легенда
-    ax.legend(loc='best', fontsize=10, framealpha=0.9)
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
+        legend_handles.append(line)
+        legend_labels.append(f'{param_name} = {label_val} {param_unit}')
+
+    # --- 3. Оформление осей ---
+    add_gost_axes(ax, x_plot_max, y_plot_max,
+                  xlabel_text='$E_{dc}$, В/м',
+                  ylabel_text='$v_\perp$, м/с')
+
+    ax.set_title(title, fontsize=15, pad=25, fontweight='bold')
+    ax.grid(True, alpha=0.2, linestyle='--')
+
+    # Устанавливаем лимиты
+    ax.set_xlim(-x_plot_max * 0.05, x_plot_max * 1.15)
+    ax.set_ylim(y_plot_min, y_plot_max * 1.2) # Больше места сверху для подписи Y
+
+    # --- 4. Формирование окна легенды ---
+
+    # дополнительные параметры для текущей серии
+    extra_params = ""
+    if series_type == 'amp':
+        extra_params = f"$f = 1.0$ ТГц, $\phi = 90^\circ$"
+    elif series_type == 'freq':
+        extra_params = f"$E_0 = 3000$ В/м, $\phi = 90^\circ$"
+    elif series_type == 'phase':
+        extra_params = f"$E_0 = 3000$ В/м, $f = 1.0$ ТГц"
+
+    common_text = f"$T = {COMMON_PARAMS['T']}$ К, $t_{{mod}} = {COMMON_PARAMS['t_mod']}$ пс, $N = {COMMON_PARAMS['N']}$"
+    params_text = f"Параметры:\n{common_text}\n{extra_params}"
+
+    from matplotlib.patches import Patch
+    patch = Patch(color='none', edgecolor='none')
+    legend_handles.append(patch)
+    legend_labels.append(params_text)
+
+    # Размещаем легенду справа от графика
+    leg = ax.legend(handles=legend_handles, labels=legend_labels,
+                    loc='center left', bbox_to_anchor=(1.05, 0.5),
+                    frameon=True, shadow=True, borderpad=0.8,
+                    handlelength=2.5, handletextpad=0.8)
+
+    # Стилизация текста параметров в легенде
+    # Последний элемент легенды - параметры
+    text_params = leg.get_texts()[-1]
+    text_params.set_fontweight('bold')
+    text_params.set_fontsize(12)
+    text_params.set_color('darkred')
+
+    # место справа для легенды
+    fig.tight_layout(rect=[0, 0, 0.72, 1])
 
 # ================= СЕРИЯ 1: Амплитуда E0 =================
-print("Plotting Series 1: Comparison by AC Amplitude...")
+print("Plotting Series 1: Comparison by AC Amplitude (GOST)...")
 data_s1 = load_comparison_data("comp_s1_E0_*.txt")
-fig1, ax1 = plt.subplots(figsize=(10, 7))
-plot_comparison_series(fig1, ax1, data_s1,
-                       'Влияние амплитуды переменного поля $E_0$\nна поперечную скорость',
-                       '$E_{dc}$ (В/м)', '$E_0$', 'В/м')
-fig1.savefig('series1_compare_amplitude.png', dpi=300, bbox_inches='tight')
+fig1, ax1 = plt.subplots(figsize=(11, 7)) # Чуть шире
+plot_comparison_series_gost(fig1, ax1, data_s1,
+                            'Влияние амплитуды переменного поля $E_0$\nна поперечную скорость',
+                            '$E_0$', 'В/м', series_type='amp')
+fig1.savefig('series1_compare_amplitude_gost.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 # ================= СЕРИЯ 2: Частота f =================
-print("Plotting Series 2: Comparison by AC Frequency...")
+print("Plotting Series 2: Comparison by AC Frequency (GOST)...")
 data_s2 = load_comparison_data("comp_s2_f_*.txt")
-fig2, ax2 = plt.subplots(figsize=(10, 7))
-plot_comparison_series(fig2, ax2, data_s2,
-                       'Влияние частоты переменного поля $f$\nна поперечную скорость',
-                       '$E_{dc}$ (В/м)', '$10*f$', 'ТГц', is_freq=True)
-fig2.savefig('series2_compare_frequency.png', dpi=300, bbox_inches='tight')
+fig2, ax2 = plt.subplots(figsize=(11, 7))
+plot_comparison_series_gost(fig2, ax2, data_s2,
+                            'Влияние частоты переменного поля $f$\nна поперечную скорость',
+                            '$f$', 'ТГц', is_freq=True, series_type='freq')
+fig2.savefig('series2_compare_frequency_gost.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 # ================= СЕРИЯ 3: Фаза phi =================
-print("Plotting Series 3: Comparison by AC Phase...")
+print("Plotting Series 3: Comparison by AC Phase (GOST)...")
 data_s3 = load_comparison_data("comp_s3_phi_*.txt")
-fig3, ax3 = plt.subplots(figsize=(10, 7))
-plot_comparison_series(fig3, ax3, data_s3,
-                       'Влияние фазы переменного поля $phi$\nна поперечную скорость',
-                       '$E_{dc}$ (В/м)', '$phi$', '°')
-fig3.savefig('series3_compare_phase.png', dpi=300, bbox_inches='tight')
+fig3, ax3 = plt.subplots(figsize=(11, 7))
+plot_comparison_series_gost(fig3, ax3, data_s3,
+                            'Влияние фазы переменного поля $\phi$\nна поперечную скорость',
+                            '$\phi$', '°', series_type='phase')
+fig3.savefig('series3_compare_phase_gost.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-print("Done. Figures saved as series*_compare_*.png")
+print("Графики сохранены как series*_compare_*_gost.png")
