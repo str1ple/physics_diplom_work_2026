@@ -44,7 +44,7 @@ int main() {
 
     double temperature = 300 * units::K;
     double time_step = 1e-14 * units::s;
-    double all_time = 200e-12 * units::s;
+    double all_time = 1000e-12 * units::s;
     size_t ensemble_size = 5000;
     Vec3 B{0, 0, 0};
 
@@ -158,7 +158,7 @@ int main() {
 
     // 3. Сравнение при изменении фазы phi
     std::cout << "\n[3/3] СЕРИЯ 3: Изменение фазы переменного поля...\n";
-    std::vector<double> phase_vals_deg = {0, 45, 90, 150, 240, 360};
+    std::vector<double> phase_vals_deg = {0, 45, 90, 135, 180, 225, 270, 315, 360};
     double E0_fixed3 = 3000.0;
     double freq3 = 1.0e12;
 

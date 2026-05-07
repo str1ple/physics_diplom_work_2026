@@ -15,8 +15,8 @@ plt.rcParams['legend.fontsize'] = 11
 # Константы моделирования для легенды
 COMMON_PARAMS = {
     'T': 300,          # К
-    't_mod': 200,      # пс
-    'N': 2000          # число частиц
+    't_mod': 1,      # нс
+    'N': 5000          # число частиц
 }
 
 def load_comparison_data(pattern):
@@ -111,7 +111,7 @@ def plot_comparison_series_gost(fig, ax, data, title, param_name, param_unit, is
 
     # ДОБАВЛЯЕМ В ЛЕГЕНДУ
     legend_handles.append(line_ref)
-    legend_labels.append('Только постоянное поле $E_{dc}$')
+    legend_labels.append('Только постоянное поле $E_{пост}$')
 
     # Кривые "DC + AC"
     for i, val in enumerate(keys):
@@ -137,7 +137,7 @@ def plot_comparison_series_gost(fig, ax, data, title, param_name, param_unit, is
 
     # --- 3. Оформление осей ---
     add_gost_axes(ax, x_plot_max, y_plot_min, y_plot_max,
-                  xlabel_text='$E_{dc}$, В/м',
+                  xlabel_text='$E$, В/м',
                   ylabel_text='$v_\perp$, м/с')
 
     ax.set_title(title, fontsize=15, pad=25, fontweight='regular')
@@ -168,13 +168,13 @@ def plot_comparison_series_gost(fig, ax, data, title, param_name, param_unit, is
     # дополнительные параметры для текущей серии
     extra_params = ""
     if series_type == 'amp':
-        extra_params = f"$f = 1.0$ ТГц, $\phi = 90^\circ$"
+        extra_params = f"$\omega = 1.0$ ТГц, $\phi = 90^\circ$"
     elif series_type == 'freq':
         extra_params = f"$E_0 = 3000$ В/м, $\phi = 90^\circ$"
     elif series_type == 'phase':
         extra_params = f"$E_0 = 3000$ В/м, $f = 1.0$ ТГц"
 
-    common_text = f"$T = {COMMON_PARAMS['T']}$ К, $t_{{mod}} = {COMMON_PARAMS['t_mod']}$ пс, $N = {COMMON_PARAMS['N']}$"
+    common_text = f"$T = {COMMON_PARAMS['T']}$ К, $t_{{мод}} = {COMMON_PARAMS['t_mod']}$ нс, $N = {COMMON_PARAMS['N']}$"
     params_text = f"Параметры:\n{common_text}\n{extra_params}"
 
     from matplotlib.patches import Patch
@@ -202,7 +202,7 @@ data_s1 = load_comparison_data("comp_s1_E0_*.txt")
 if data_s1:
     fig1, ax1 = plt.subplots(figsize=(15, 8))
     plot_comparison_series_gost(fig1, ax1, data_s1,
-                                'Влияние амплитуды переменного поля $E_0$\nна поперечную скорость',
+                                'Влияние амплитуды переменного поля $E_0$\nна поперечную скорость электронов',
                                 '$E_0$', 'В/м', series_type='amp')
     fig1.savefig('series1_compare_amplitude_gost.png', dpi=300, bbox_inches='tight')
     plt.show()
@@ -213,8 +213,8 @@ data_s2 = load_comparison_data("comp_s2_f_*.txt")
 if data_s2:
     fig2, ax2 = plt.subplots(figsize=(15, 8))
     plot_comparison_series_gost(fig2, ax2, data_s2,
-                                'Влияние частоты переменного поля $f$\nна поперечную скорость',
-                                '$f$', 'ТГц', is_freq=True, series_type='freq')
+                                'Влияние частоты переменного поля $f$\nна поперечную скорость электронов',
+                                '$\omega$', '* 0.1 ТГц', is_freq=True, series_type='freq')
     fig2.savefig('series2_compare_frequency_gost.png', dpi=300, bbox_inches='tight')
     plt.show()
 
@@ -224,7 +224,7 @@ data_s3 = load_comparison_data("comp_s3_phi_*.txt")
 if data_s3:
     fig3, ax3 = plt.subplots(figsize=(15, 8))
     plot_comparison_series_gost(fig3, ax3, data_s3,
-                                'Влияние фазы переменного поля $\phi$\nна поперечную скорость',
+                                'Влияние сдвига фаз переменного поля $\phi$\nна поперечную скорость электронов',
                                 '$\phi$', '°', series_type='phase')
     fig3.savefig('series3_compare_phase_gost.png', dpi=300, bbox_inches='tight')
     plt.show()
